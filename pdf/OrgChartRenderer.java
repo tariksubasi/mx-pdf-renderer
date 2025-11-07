@@ -217,6 +217,8 @@ public class OrgChartRenderer {
     private String sanitizeText(String text) {
         if (text == null) return "";
         return text
+            // Replace newline characters with a space to prevent font errors
+            .replaceAll("[\\r\\n]+", " ")
             .replace("ş", "s").replace("Ş", "S")
             .replace("ğ", "g").replace("Ğ", "G")
             .replace("ü", "u").replace("Ü", "U")
