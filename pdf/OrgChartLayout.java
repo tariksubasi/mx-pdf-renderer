@@ -171,14 +171,24 @@ public class OrgChartLayout {
         // Special case: single child should be centered under parent
         if (node.getPositions().size() == 1) {
             Position child = node.getPositions().get(0);
-            
-            // Place parent first
-            layouts.put(node, new NodeLayout(x, y, nodeWidth, nodeHeight, level));
-            
-            // Layout child centered under parent (same X position)
-            layoutNode(child, x, childY, level + 1, layouts);
-            
-            return Style.NODE_WIDTH_EFFECTIVE;
+
+            // Layout child subtree first to determine its position and width
+            float childsTreeWidth = layoutNode(child, x, childY, level + 1, layouts);
+
+            // Get final layout of the child node, which might have been shifted by its own children
+            NodeLayout childLayout = layouts.get(child);
+            if (childLayout != null) {
+                // Center parent over the real position of the child node
+                float childCenterX = childLayout.x + (childLayout.width / 2f);
+                float parentX = childCenterX - (nodeWidth / 2f);
+                layouts.put(node, new NodeLayout(parentX, y, nodeWidth, nodeHeight, level));
+            } else {
+                // Fallback, though this should not be reached in normal execution
+                layouts.put(node, new NodeLayout(x, y, nodeWidth, nodeHeight, level));
+            }
+
+            // The width of this subtree is the width of its child's subtree
+            return childsTreeWidth;
         }
         
         // Multiple children - spread them out

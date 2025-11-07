@@ -23,6 +23,40 @@ import java.util.Map;
  */
 public class OrgChartRenderer {
     
+    // Structure to hold calculated layout and bounds
+    private static class LayoutResult {
+        final Map<Position, OrgChartLayout.NodeLayout> layouts;
+        final float minX, maxX, minY, maxY;
+        final float width, height;
+
+        LayoutResult(Map<Position, OrgChartLayout.NodeLayout> layouts) {
+            this.layouts = layouts;
+            
+            float minX = Float.MAX_VALUE;
+            float maxX = Float.MIN_VALUE;
+            float minY = Float.MAX_VALUE;
+            float maxY = Float.MIN_VALUE;
+
+            if (layouts == null || layouts.isEmpty()) {
+                minX = maxX = minY = maxY = 0;
+            } else {
+                for (OrgChartLayout.NodeLayout layout : layouts.values()) {
+                    if (layout.x < minX) minX = layout.x;
+                    if (layout.x + layout.width > maxX) maxX = layout.x + layout.width;
+                    if (layout.y - layout.height < minY) minY = layout.y - layout.height;
+                    if (layout.y > maxY) maxY = layout.y;
+                }
+            }
+            
+            this.minX = minX;
+            this.maxX = maxX;
+            this.minY = minY;
+            this.maxY = maxY;
+            this.width = maxX - minX;
+            this.height = maxY - minY;
+        }
+    }
+
     private PDDocument document;
     private PDFont fontRegular;
     private PDFont fontBold;
@@ -73,20 +107,28 @@ public class OrgChartRenderer {
         
         // Render Turkish page
         if (dataTR != null) {
+            // 1. First, perform layout calculation
+            Map<Position, OrgChartLayout.NodeLayout> layoutsTR = OrgChartLayout.layoutTree(dataTR, 0, 0);
+            LayoutResult layoutResultTR = new LayoutResult(layoutsTR);
+
+            // 2. Then, render the page using the calculated layout
             int totalNormTR = OrgChartParser.sumNorm(dataTR);
-            OrgChartLayout.PageSize pageSizeTR = OrgChartLayout.calculatePageSize(dataTR);
-            renderPage(dataTR, titleTR, totalNormLabelTR, totalNormTR,
+            renderPage(dataTR, layoutResultTR, titleTR, totalNormLabelTR, totalNormTR,
                     footerPreparedByTR, footerDocDateTR, footerLastUpdateTR,
-                    footerImageUrlTR, pageSizeTR);
+                    footerImageUrlTR);
         }
         
         // Render English page
         if (dataEN != null) {
+            // 1. First, perform layout calculation
+            Map<Position, OrgChartLayout.NodeLayout> layoutsEN = OrgChartLayout.layoutTree(dataEN, 0, 0);
+            LayoutResult layoutResultEN = new LayoutResult(layoutsEN);
+
+            // 2. Then, render the page using the calculated layout
             int totalNormEN = OrgChartParser.sumNorm(dataEN);
-            OrgChartLayout.PageSize pageSizeEN = OrgChartLayout.calculatePageSize(dataEN);
-            renderPage(dataEN, titleEN, totalNormLabelEN, totalNormEN,
+            renderPage(dataEN, layoutResultEN, titleEN, totalNormLabelEN, totalNormEN,
                     footerPreparedByEN, footerDocDateEN, footerLastUpdateEN,
-                    footerImageUrlEN, pageSizeEN);
+                    footerImageUrlEN);
         }
         
         // Save to byte array
@@ -101,26 +143,37 @@ public class OrgChartRenderer {
      * Render a single page (TR or EN)
      */
     private void renderPage(
-            Position data, String title, String totalNormLabel, int totalNorm,
+            Position data, LayoutResult layoutResult, String title, String totalNormLabel, int totalNorm,
             String footerPreparedBy, String footerDocDate, String footerLastUpdate,
-            String footerImageUrl, OrgChartLayout.PageSize pageSize
+            String footerImageUrl
     ) throws Exception {
         
+        // Calculate dynamic page size based on content
+        float headerHeight = Style.HEADER_FONT_SIZE + Style.HEADER_MARGIN_BOTTOM + 
+                             Style.TOTAL_NORM_FONT_SIZE + Style.TOTAL_NORM_MARGIN_BOTTOM;
+        float footerHeight = Style.FOOTER_IMAGE_HEIGHT + Style.FOOTER_MARGIN_TOP;
+        
+        float requiredWidth = layoutResult.width + (Style.PAGE_PADDING * 2) + (Style.PAGE_EXTRA_HORIZONTAL_PADDING * 2);
+        float requiredHeight = layoutResult.height + headerHeight + footerHeight + (Style.PAGE_PADDING * 2);
+
+        float pageWidth = Math.max(Style.MIN_PAGE_WIDTH, requiredWidth);
+        float pageHeight = Math.max(Style.MIN_PAGE_HEIGHT, requiredHeight);
+        
         // Create page with custom size
-        PDPage page = new PDPage(new PDRectangle(pageSize.width, pageSize.height));
+        PDPage page = new PDPage(new PDRectangle(pageWidth, pageHeight));
         document.addPage(page);
         
         PDPageContentStream contentStream = new PDPageContentStream(document, page);
         
         // Draw white background
         contentStream.setNonStrokingColor(Style.PAGE_BACKGROUND);
-        contentStream.addRect(0, 0, pageSize.width, pageSize.height);
+        contentStream.addRect(0, 0, pageWidth, pageHeight);
         contentStream.fill();
         
-        float currentY = pageSize.height - Style.PAGE_PADDING;
+        float currentY = pageHeight - Style.PAGE_PADDING;
         
         // Draw header
-        currentY = drawHeader(contentStream, title, currentY, pageSize.width, page);
+        currentY = drawHeader(contentStream, title, currentY, pageWidth, page);
         
         // Draw total norm only if greater than 0
         if (totalNorm > 0) {
@@ -128,12 +181,11 @@ public class OrgChartRenderer {
         }
         
         // Layout and draw organization tree
-        float contentStartY = currentY - Style.TOTAL_NORM_MARGIN_BOTTOM;
-        drawOrganizationTree(contentStream, data, Style.PAGE_PADDING, contentStartY, pageSize.width);
+        drawOrganizationTree(contentStream, data, layoutResult, currentY, pageWidth);
         
         // Draw footer
         drawFooter(contentStream, footerPreparedBy, footerDocDate, footerLastUpdate,
-                footerImageUrl, pageSize.width, pageSize.height);
+                footerImageUrl, pageWidth, pageHeight);
         
         contentStream.close();
     }
@@ -293,35 +345,39 @@ public class OrgChartRenderer {
     /**
      * Draw organization tree
      */
-    private void drawOrganizationTree(PDPageContentStream contentStream, Position root, float startX, float startY, float pageWidth) throws Exception {
-        if (root == null) {
+    private void drawOrganizationTree(PDPageContentStream contentStream, Position root, LayoutResult layoutResult, float startY, float pageWidth) throws Exception {
+        if (root == null || layoutResult == null || layoutResult.layouts.isEmpty()) {
             return;
         }
+
+        // The layout is already calculated, we just need to position it correctly on the page.
+        Map<Position, OrgChartLayout.NodeLayout> layouts = layoutResult.layouts;
+
+        // The offset needed to center the tree horizontally.
+        float offsetX = (pageWidth - layoutResult.width) / 2f - layoutResult.minX;
         
-        // Calculate layout
-        Map<Position, OrgChartLayout.NodeLayout> layouts = OrgChartLayout.layoutTree(root, 0, startY);
-        
-        // Find the total width of the tree to center it
-        float minX = Float.MAX_VALUE;
-        float maxX = Float.MIN_VALUE;
-        for (OrgChartLayout.NodeLayout layout : layouts.values()) {
-            if (layout.x < minX) minX = layout.x;
-            if (layout.x + layout.width > maxX) maxX = layout.x + layout.width;
+        // The offset needed to place the tree correctly vertically after the header.
+        float offsetY = startY - layoutResult.maxY;
+
+        // We need a new map for the final, adjusted layouts.
+        Map<Position, OrgChartLayout.NodeLayout> finalLayouts = new java.util.HashMap<>();
+        for(Map.Entry<Position, OrgChartLayout.NodeLayout> entry : layouts.entrySet()) {
+            OrgChartLayout.NodeLayout original = entry.getValue();
+            // Create a new layout object with adjusted coordinates
+            finalLayouts.put(entry.getKey(), new OrgChartLayout.NodeLayout(
+                original.x + offsetX,
+                original.y + offsetY,
+                original.width,
+                original.height,
+                original.level
+            ));
         }
-        
-        float treeWidth = maxX - minX;
-        float offsetX = (pageWidth - treeWidth) / 2;
-        
-        // Adjust all X positions to center the tree
-        for (OrgChartLayout.NodeLayout layout : layouts.values()) {
-            layout.x += offsetX;
-        }
-        
+
         // Draw connecting lines first (so they appear behind nodes)
-        drawConnectingLines(contentStream, root, layouts);
-        
+        drawConnectingLines(contentStream, root, finalLayouts);
+
         // Draw nodes on top
-        for (Map.Entry<Position, OrgChartLayout.NodeLayout> entry : layouts.entrySet()) {
+        for (Map.Entry<Position, OrgChartLayout.NodeLayout> entry : finalLayouts.entrySet()) {
             drawNode(contentStream, entry.getKey(), entry.getValue());
         }
     }
@@ -529,13 +585,42 @@ public class OrgChartRenderer {
      * Draw footer with text and image - both at bottom, same baseline
      */
     private void drawFooter(PDPageContentStream contentStream, String preparedBy, String docDate, String lastUpdate, String imageUrl, float pageWidth, float pageHeight) throws Exception {
-        // Position footer at the very bottom of the page
-        float footerBaseY = Style.PAGE_PADDING + 20;  // Small lift from absolute bottom
-        
-        // Draw footer image FIRST (right side) - at the bottom
-        float imageWidth = 0;
+        // --- REFACTORED FOOTER LOGIC ---
+
+        // 1. Prepare footer content and calculate required heights
+        String[] footerLines = {
+            preparedBy != null ? preparedBy : "",
+            docDate != null ? docDate : "",
+            lastUpdate != null ? lastUpdate : ""
+        };
+
+        int nonEmptyLines = 0;
+        for (String l : footerLines) {
+            if (l != null && !l.isEmpty()) {
+                nonEmptyLines++;
+            }
+        }
+
+        float textBlockHeight = (nonEmptyLines > 0)
+            ? ((nonEmptyLines - 1) * Style.FOOTER_TEXT_FONT_SIZE * 1.4f) + Style.FOOTER_TEXT_FONT_SIZE
+            : 0f;
+        float imageHeight = Style.FOOTER_IMAGE_HEIGHT;
+        float contentHeight = Math.max(textBlockHeight, imageHeight);
+        float footerBottomMargin = 10f; // Moves the entire footer block closer to the bottom edge.
+
+        // 2. Determine the Y position for the top border and draw it first
+        float borderY = footerBottomMargin + contentHeight + 15f; // 15f padding between content and border
+        contentStream.setStrokingColor(new Color(0xDD, 0xDD, 0xDD));
+        contentStream.setLineWidth(1f);
+        contentStream.moveTo(Style.PAGE_PADDING, borderY);
+        contentStream.lineTo(pageWidth - Style.PAGE_PADDING, borderY);
+        contentStream.stroke();
+
+        // 3. Position the content block below the border
+        float contentBottomY = borderY - 15f - contentHeight;
+
+        // 4. Draw the footer image (right side)
         try {
-            // Use a placeholder image URL or the one provided
             String finalImageUrl = (imageUrl != null && !imageUrl.isEmpty()) 
                 ? imageUrl 
                 : "https://fintechtime.com/wp-content/uploads/2019/04/Garanti_BBVA_logo.jpg";
@@ -545,66 +630,36 @@ public class OrgChartRenderer {
             PDImageXObject image = PDImageXObject.createFromByteArray(document, 
                 imageStream.readAllBytes(), "footer-image");
             
-            float imageHeight = Style.FOOTER_IMAGE_HEIGHT;
-            imageWidth = image.getWidth() * (imageHeight / image.getHeight());
-            float imageX = pageWidth - Style.PAGE_PADDING - imageWidth;
+            float calculatedImageWidth = image.getWidth() * (imageHeight / image.getHeight());
+            float imageX = pageWidth - Style.PAGE_PADDING - calculatedImageWidth;
             
-            // Place image at bottom right
-            contentStream.drawImage(image, imageX, footerBaseY, imageWidth, imageHeight);
+            // Align image bottom to the content area bottom
+            contentStream.drawImage(image, imageX, contentBottomY, calculatedImageWidth, imageHeight);
             imageStream.close();
         } catch (Exception e) {
-            // If image loading fails, draw a placeholder text
             contentStream.setNonStrokingColor(Color.GRAY);
             contentStream.beginText();
             contentStream.setFont(fontRegular, 12);
-            contentStream.newLineAtOffset(pageWidth - 150, footerBaseY + 60);
+            contentStream.newLineAtOffset(pageWidth - 150, contentBottomY + 20);
             contentStream.showText("[Logo]");
             contentStream.endText();
         }
         
-        // Draw footer text (left side) - bottom aligned, stacking upwards
+        // 5. Draw the footer text (left side), stacking upwards from the bottom
         contentStream.setNonStrokingColor(Style.FOOTER_TEXT_COLOR);
-        
-        String[] footerLines = {
-            preparedBy != null ? preparedBy : "",
-            docDate != null ? docDate : "",
-            lastUpdate != null ? lastUpdate : ""
-        };
-        // Count non-empty text lines to compute text block height
-        int nonEmptyLines = 0;
-        for (String l : footerLines) {
-            if (l != null && !l.isEmpty()) {
-                nonEmptyLines++;
-            }
-        }
-        
-        // Start from bottom and stack upwards
-        float textY = footerBaseY + Style.FOOTER_TEXT_FONT_SIZE;
-        // Draw lines in reverse order so they stack from bottom up
+        float textY = contentBottomY + Style.FOOTER_TEXT_FONT_SIZE;
+        // Draw lines in reverse order to stack them from the bottom up
         for (int i = footerLines.length - 1; i >= 0; i--) {
             String line = footerLines[i];
             if (!line.isEmpty()) {
                 contentStream.beginText();
                 contentStream.setFont(fontRegular, Style.FOOTER_TEXT_FONT_SIZE);
-                // Align with title - use PAGE_PADDING only (same as header)
                 contentStream.newLineAtOffset(Style.PAGE_PADDING, textY);
                 contentStream.showText(sanitizeText(line));
                 contentStream.endText();
-                textY += Style.FOOTER_TEXT_FONT_SIZE * 1.4f;  // Stack upwards
+                textY += Style.FOOTER_TEXT_FONT_SIZE * 1.4f;
             }
         }
-
-        // Draw a light gray top border above footer content across page width
-        float textBlockTop = footerBaseY + (nonEmptyLines > 0
-                ? Style.FOOTER_TEXT_FONT_SIZE + (nonEmptyLines - 1) * (Style.FOOTER_TEXT_FONT_SIZE * 1.4f)
-                : 0f);
-        float imageTop = footerBaseY + Style.FOOTER_IMAGE_HEIGHT;
-        float borderY = Math.max(textBlockTop, imageTop) + 2f; // minimal gap above footer content
-        contentStream.setStrokingColor(new Color(0xDD, 0xDD, 0xDD));
-        contentStream.setLineWidth(1f);
-        contentStream.moveTo(Style.PAGE_PADDING, borderY);
-        contentStream.lineTo(pageWidth - Style.PAGE_PADDING, borderY);
-        contentStream.stroke();
     }
 }
 

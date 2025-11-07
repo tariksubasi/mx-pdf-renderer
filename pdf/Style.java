@@ -19,8 +19,8 @@ public class Style {
     public static final float TOTAL_NORM_MARGIN_BOTTOM = 30f;  // More spacing
     
     // Node container styles
-    public static final float NODE_CONTAINER_PADDING_VERTICAL = 15f;  // Increased from 10 for better spacing
-    public static final float NODE_CONTAINER_PADDING_HORIZONTAL = 8f;  // Increased from 5
+    public static final float NODE_CONTAINER_PADDING_VERTICAL = 23f;  // Increased from 15 for better spacing (50% increase)
+    public static final float NODE_CONTAINER_PADDING_HORIZONTAL = 12f;  // Increased from 8 (50% increase)
     
     // Node box styles - made bigger (130% increase - 30% bigger)
     public static final Color NODE_BACKGROUND = Colors.hexToColor("#F6F8FF");
@@ -45,15 +45,15 @@ public class Style {
     public static final float VERTICAL_LINE_WIDTH = 1f;
     
     // Children row styles
-    public static final float CHILDREN_ROW_MARGIN_TOP = 30f;  // More vertical space between levels
+    public static final float CHILDREN_ROW_MARGIN_TOP = 45f;  // More vertical space between levels (50% increase)
     
     // Footer styles - made very readable
     public static final float FOOTER_MARGIN_TOP = 40f;  // Increased from 30
     public static final float FOOTER_PADDING_HORIZONTAL = 0f;  // No extra padding - align with title
     public static final float FOOTER_PADDING_VERTICAL = 20f;  // Increased from 15
-    public static final float FOOTER_TEXT_FONT_SIZE = 22f;  // Slightly smaller than header
+    public static final float FOOTER_TEXT_FONT_SIZE = 17f;  // Slightly smaller than header, 25% smaller than 22f
     public static final Color FOOTER_TEXT_COLOR = Colors.hexToColor("#333333");
-    public static final float FOOTER_IMAGE_HEIGHT = 150f;  // Reasonable size for logo
+    public static final float FOOTER_IMAGE_HEIGHT = 75f;  // Reasonable size for logo, halved from 150
     
     // Layout calculation constants (matching React widget exactly)
     public static final float NODE_WIDTH_EFFECTIVE = NODE_WIDTH + (NODE_CONTAINER_PADDING_HORIZONTAL * 2);
@@ -66,6 +66,7 @@ public class Style {
     public static final float MAX_PAGE_HEIGHT = 20000f; // Very large, effectively unlimited
     public static final float PAGE_WIDTH_EXTRA = 500f;  // Increased for margins
     public static final float PAGE_HEIGHT_EXTRA = 500f; // Increased for margins
+    public static final float PAGE_EXTRA_HORIZONTAL_PADDING = 200f; // Extra padding on left/right of the whole chart
     
     // Font weights (Roboto variants)
     public static final String FONT_LIGHT = "Roboto-Light";
