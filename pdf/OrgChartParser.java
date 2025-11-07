@@ -14,7 +14,8 @@ import java.util.*;
 public class OrgChartParser {
     
     /**
-     * Parse JSON string and merge hierarchies (matching React widget's parseAndMergeOrgData)
+     * Parse JSON string - handles flat array structure where each Position has direct children in Positions array
+     * (not recursive nested structure)
      */
     public static Position parse(String jsonString) throws ParseException {
         if (jsonString == null || jsonString.trim().isEmpty()) {
@@ -24,31 +25,33 @@ public class OrgChartParser {
         JSONParser parser = new JSONParser(JSONParser.MODE_PERMISSIVE);
         Object parsed = parser.parse(jsonString);
         
-        List<Position> dataArray = new ArrayList<>();
+        List<Position> allPositions = new ArrayList<>();
         
+        // Parse all positions from the flat array (not recursive)
         if (parsed instanceof JSONArray) {
             JSONArray arr = (JSONArray) parsed;
             for (Object obj : arr) {
                 if (obj instanceof JSONObject) {
-                    dataArray.add(parsePosition((JSONObject) obj));
+                    allPositions.add(parsePositionFlat((JSONObject) obj));
                 }
             }
         } else if (parsed instanceof JSONObject) {
-            dataArray.add(parsePosition((JSONObject) parsed));
+            allPositions.add(parsePositionFlat((JSONObject) parsed));
         }
         
-        if (dataArray.isEmpty()) {
+        if (allPositions.isEmpty()) {
             return null;
         }
         
-        Integer rootId = dataArray.get(0).getPositionID();
-        return mergeHierarchies(dataArray, rootId);
+        // Build tree structure using HierarchyCode relationships
+        return buildTreeFromFlatList(allPositions);
     }
     
     /**
-     * Parse a single Position object from JSON
+     * Parse a single Position object from JSON (flat structure - not recursive)
+     * Positions array contains only direct children, not nested recursively
      */
-    private static Position parsePosition(JSONObject json) {
+    private static Position parsePositionFlat(JSONObject json) {
         Position pos = new Position();
         
         if (json.containsKey("PositionID")) {
@@ -98,13 +101,18 @@ public class OrgChartParser {
             pos.setTitleCode(tc != null ? tc.toString() : null);
         }
         
+        // Parse direct children from Positions array (not recursive - just one level)
         if (json.containsKey("Positions")) {
             Object positions = json.get("Positions");
             if (positions instanceof JSONArray) {
                 List<Position> children = new ArrayList<>();
                 for (Object child : (JSONArray) positions) {
                     if (child instanceof JSONObject) {
-                        children.add(parsePosition((JSONObject) child));
+                        // Parse child but don't recursively parse its Positions - we'll build tree from flat list
+                        Position childPos = parsePositionFlat((JSONObject) child);
+                        // Clear child's Positions - we'll rebuild tree structure later
+                        childPos.setPositions(new ArrayList<>());
+                        children.add(childPos);
                     }
                 }
                 pos.setPositions(children);
@@ -112,6 +120,112 @@ public class OrgChartParser {
         }
         
         return pos;
+    }
+    
+    /**
+     * Build tree structure from flat list of positions using HierarchyCode relationships
+     */
+    private static Position buildTreeFromFlatList(List<Position> allPositions) {
+        if (allPositions == null || allPositions.isEmpty()) {
+            return null;
+        }
+        
+        // Step 1: Merge positions with same PositionID and collect all unique positions
+        Map<Integer, Position> positionMap = new HashMap<>();
+        Map<String, List<Position>> positionsByHierarchyCode = new HashMap<>();
+        
+        for (Position pos : allPositions) {
+            Integer posId = pos.getPositionID();
+            String hierarchyCode = pos.getHierarchyCode();
+            
+            if (posId != null) {
+                if (positionMap.containsKey(posId)) {
+                    // Merge with existing position
+                    Position existing = positionMap.get(posId);
+                    // Merge children from Positions array
+                    existing.setPositions(mergePositions(existing.getPositions(), pos.getPositions()));
+                    // Preserve positive Norm if existing doesn't have it
+                    Integer existingNorm = existing.getNorm();
+                    Integer newNorm = pos.getNorm();
+                    if ((existingNorm == null || existingNorm.intValue() <= 0) && newNorm != null && newNorm.intValue() > 0) {
+                        existing.setNorm(newNorm);
+                    }
+                } else {
+                    // New position - clone it
+                    Position cloned = clonePosition(pos);
+                    positionMap.put(posId, cloned);
+                    
+                    // Also index by HierarchyCode for building tree
+                    if (hierarchyCode != null && !hierarchyCode.isEmpty()) {
+                        positionsByHierarchyCode.computeIfAbsent(hierarchyCode, k -> new ArrayList<>()).add(cloned);
+                    }
+                }
+            }
+        }
+        
+        // Step 2: Build tree structure using HierarchyCode relationships
+        // Clear all Positions lists first - we'll rebuild them
+        for (Position pos : positionMap.values()) {
+            pos.setPositions(new ArrayList<>());
+        }
+        
+        // Build parent-child relationships
+        for (Position pos : positionMap.values()) {
+            String parentHierarchyCode = pos.getParentHierarchyCode();
+            if (parentHierarchyCode != null && !parentHierarchyCode.isEmpty()) {
+                // Find parent by matching HierarchyCode
+                List<Position> potentialParents = positionsByHierarchyCode.get(parentHierarchyCode);
+                if (potentialParents != null && !potentialParents.isEmpty()) {
+                    // Use first parent found (should be unique by HierarchyCode)
+                    Position parent = potentialParents.get(0);
+                    parent.getPositions().add(pos);
+                }
+            }
+        }
+        
+        // Step 3: Find root (position with no parent or shortest HierarchyCode)
+        Position root = null;
+        int shortestLength = Integer.MAX_VALUE;
+        
+        for (Position pos : positionMap.values()) {
+            String parentHierarchyCode = pos.getParentHierarchyCode();
+            String hierarchyCode = pos.getHierarchyCode();
+            
+            if (parentHierarchyCode == null || parentHierarchyCode.isEmpty() || 
+                parentHierarchyCode.equals("/") || parentHierarchyCode.equals("")) {
+                // This is a root candidate
+                if (hierarchyCode != null) {
+                    int length = hierarchyCode.split("/").length;
+                    if (length < shortestLength) {
+                        shortestLength = length;
+                        root = pos;
+                    }
+                } else if (root == null) {
+                    root = pos;
+                }
+            }
+        }
+        
+        // If no root found by parent check, use position with shortest HierarchyCode
+        if (root == null) {
+            for (Position pos : positionMap.values()) {
+                String hierarchyCode = pos.getHierarchyCode();
+                if (hierarchyCode != null) {
+                    int length = hierarchyCode.split("/").length;
+                    if (length < shortestLength) {
+                        shortestLength = length;
+                        root = pos;
+                    }
+                }
+            }
+        }
+        
+        // Fallback: use first position if still no root found
+        if (root == null && !positionMap.isEmpty()) {
+            root = positionMap.values().iterator().next();
+        }
+        
+        return root;
     }
     
     /**
@@ -134,45 +248,6 @@ public class OrgChartParser {
         }
         
         return merged;
-    }
-    
-    /**
-     * Merge hierarchies (matching React widget's mergeHierarchies)
-     */
-    private static Position mergeHierarchies(List<Position> roleArrays, Integer positionId) {
-        Map<Integer, Position> positionMap = new HashMap<>();
-        
-        // First pass: clone all positions and collect in map
-        for (Position pos : roleArrays) {
-            Position cloned = clonePosition(pos);
-            
-            if (positionMap.containsKey(pos.getPositionID())) {
-                Position existing = positionMap.get(pos.getPositionID());
-                existing.setPositions(mergePositions(existing.getPositions(), cloned.getPositions()));
-                // Preserve a positive Norm if existing doesn't have it
-                Integer existingNorm = existing.getNorm();
-                Integer newNorm = cloned.getNorm();
-                if ((existingNorm == null || existingNorm.intValue() <= 0) && newNorm != null && newNorm.intValue() > 0) {
-                    existing.setNorm(newNorm);
-                }
-            } else {
-                positionMap.put(pos.getPositionID(), cloned);
-            }
-        }
-        
-        // Second pass: update children references
-        for (Map.Entry<Integer, Position> entry : positionMap.entrySet()) {
-            Position posObj = entry.getValue();
-            List<Position> updated = new ArrayList<>();
-            for (Position child : posObj.getPositions()) {
-                Position mappedChild = positionMap.get(child.getPositionID());
-                updated.add(mappedChild != null ? mappedChild : child);
-            }
-            posObj.setPositions(updated);
-        }
-        
-        Position root = positionMap.get(positionId);
-        return root != null ? root : (!roleArrays.isEmpty() ? roleArrays.get(0) : null);
     }
     
     /**
