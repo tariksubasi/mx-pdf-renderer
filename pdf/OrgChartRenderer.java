@@ -113,8 +113,7 @@ public class OrgChartRenderer {
             LayoutResult layoutResultTR = new LayoutResult(layoutsTR);
 
             // 2. Then, render the page using the calculated layout
-            int totalNormTR = OrgChartParser.sumNorm(dataTR);
-            renderPage(dataTR, layoutResultTR, titleTR, totalNormLabelTR, totalNormTR,
+            renderPage(dataTR, layoutResultTR, titleTR, totalNormLabelTR,
                     footerPreparedByTR, footerDocDateTR, footerLastUpdateTR,
                     footerImageUrlTR);
         }
@@ -126,8 +125,7 @@ public class OrgChartRenderer {
             LayoutResult layoutResultEN = new LayoutResult(layoutsEN);
 
             // 2. Then, render the page using the calculated layout
-            int totalNormEN = OrgChartParser.sumNorm(dataEN);
-            renderPage(dataEN, layoutResultEN, titleEN, totalNormLabelEN, totalNormEN,
+            renderPage(dataEN, layoutResultEN, titleEN, totalNormLabelEN,
                     footerPreparedByEN, footerDocDateEN, footerLastUpdateEN,
                     footerImageUrlEN);
         }
@@ -144,7 +142,7 @@ public class OrgChartRenderer {
      * Render a single page (TR or EN)
      */
     private void renderPage(
-            Position data, LayoutResult layoutResult, String title, String totalNormLabel, int totalNorm,
+            Position data, LayoutResult layoutResult, String title, String totalNormLabel,
             String footerPreparedBy, String footerDocDate, String footerLastUpdate,
             String footerImageUrl
     ) throws Exception {
@@ -176,9 +174,9 @@ public class OrgChartRenderer {
         // Draw header
         currentY = drawHeader(contentStream, title, currentY, pageWidth, page);
         
-        // Draw total norm only if greater than 0
-        if (totalNorm > 0) {
-            currentY = drawTotalNorm(contentStream, totalNormLabel, totalNorm, currentY, page);
+        // Draw total norm label if provided (label already contains the number)
+        if (totalNormLabel != null && !totalNormLabel.trim().isEmpty()) {
+            currentY = drawTotalNorm(contentStream, totalNormLabel, currentY, page);
         }
         
         // Layout and draw organization tree
@@ -329,11 +327,10 @@ public class OrgChartRenderer {
     }
     
     /**
-     * Draw total norm text
+     * Draw total norm text (label already contains the number)
      */
-    private float drawTotalNorm(PDPageContentStream contentStream, String label, int total, float y, PDPage page) throws Exception {
-        String text = (label != null ? label : "Total Norm:") + " " + total;
-        text = sanitizeText(text);
+    private float drawTotalNorm(PDPageContentStream contentStream, String label, float y, PDPage page) throws Exception {
+        String text = sanitizeText(label);
         
         contentStream.setNonStrokingColor(Color.BLACK);
         contentStream.beginText();
