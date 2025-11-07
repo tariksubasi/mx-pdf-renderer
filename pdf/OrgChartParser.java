@@ -69,7 +69,18 @@ public class OrgChartParser {
         
         if (json.containsKey("Norm")) {
             Object norm = json.get("Norm");
-            pos.setNorm(norm instanceof Number ? ((Number) norm).intValue() : 0);
+            // Explicitly parse to integer - handle Number, String, or null
+            int normValue = 0;
+            if (norm instanceof Number) {
+                normValue = ((Number) norm).intValue();
+            } else if (norm instanceof String) {
+                try {
+                    normValue = Integer.parseInt((String) norm);
+                } catch (NumberFormatException e) {
+                    normValue = 0;
+                }
+            }
+            pos.setNorm(normValue);
         }
         
         if (json.containsKey("TitleCode")) {
@@ -171,7 +182,9 @@ public class OrgChartParser {
             return 0;
         }
         
-        int total = node.getNorm();
+        // Explicitly convert to int for integer arithmetic
+        Integer normValue = node.getNorm();
+        int total = (normValue != null) ? normValue.intValue() : 0;
         for (Position child : node.getPositions()) {
             total += sumNorm(child);
         }

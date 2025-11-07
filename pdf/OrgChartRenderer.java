@@ -489,7 +489,9 @@ public class OrgChartRenderer {
         positionName = sanitizeText(positionName);
         
         // If norm is 0, center the text vertically, otherwise leave room for norm at bottom
-        int norm = position.getNorm();
+        // Explicitly parse and convert to int for proper integer comparison
+        Integer normValue = position.getNorm();
+        int norm = (normValue != null) ? normValue.intValue() : 0;
         if (norm > 0) {
             // Reserve bottom area for norm (padding + margin + font height)
             float reservedBottom = Style.NODE_PADDING + Style.NODE_NORM_MARGIN_TOP + Style.NODE_NORM_FONT_SIZE + Style.NODE_PADDING;
