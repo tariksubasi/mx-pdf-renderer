@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -623,24 +624,28 @@ public class OrgChartRenderer {
         // 3. Position the content block below the border
         float contentBottomY = borderY - 15f - contentHeight;
 
-        // 4. Draw the footer image (right side)
+        // 4. Draw the footer image (right side) from Base64 string
         try {
-            String finalImageUrl = (imageUrl != null && !imageUrl.isEmpty()) 
-                ? imageUrl 
-                : "https://fintechtime.com/wp-content/uploads/2019/04/Garanti_BBVA_logo.jpg";
-            
-            URL url = new URL(finalImageUrl);
-            InputStream imageStream = url.openStream();
-            PDImageXObject image = PDImageXObject.createFromByteArray(document, 
-                imageStream.readAllBytes(), "footer-image");
-            
-            float calculatedImageWidth = image.getWidth() * (imageHeight / image.getHeight());
-            float imageX = pageWidth - Style.PAGE_PADDING - calculatedImageWidth;
-            
-            // Align image bottom to the content area bottom
-            contentStream.drawImage(image, imageX, contentBottomY, calculatedImageWidth, imageHeight);
-            imageStream.close();
+            if (imageUrl != null && !imageUrl.trim().isEmpty()) {
+                String base64Image = imageUrl;
+                // Remove data URI prefix if present
+                if (base64Image.contains(",")) {
+                    base64Image = base64Image.substring(base64Image.indexOf(",") + 1);
+                }
+                
+                byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+                PDImageXObject image = PDImageXObject.createFromByteArray(document, imageBytes, "footer-image");
+                
+                float calculatedImageWidth = image.getWidth() * (imageHeight / image.getHeight());
+                float imageX = pageWidth - Style.PAGE_PADDING - calculatedImageWidth;
+                
+                // Align image bottom to the content area bottom
+                contentStream.drawImage(image, imageX, contentBottomY, calculatedImageWidth, imageHeight);
+            } else {
+                 throw new Exception("Image URL (Base64) is empty.");
+            }
         } catch (Exception e) {
+            Core.getLogger("OrgChartRenderer").warn("Failed to decode or draw Base64 image: " + e.getMessage());
             contentStream.setNonStrokingColor(Color.GRAY);
             contentStream.beginText();
             contentStream.setFont(fontRegular, 12);
