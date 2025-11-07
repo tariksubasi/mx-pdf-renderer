@@ -500,8 +500,9 @@ public class OrgChartRenderer {
             float normY = y - h + Style.NODE_PADDING + Style.NODE_NORM_MARGIN_TOP + Style.NODE_NORM_FONT_SIZE;
             drawCenteredText(contentStream, normText, x, normY, w, 0, fontRegular, Style.NODE_NORM_FONT_SIZE, Color.BLACK, false);
         } else {
-            // No norm - center position name vertically in the box
-            drawCenteredText(contentStream, positionName, x, y - h/2, w, h, fontRegular, Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
+            // No norm - center position name vertically in the whole box
+            // The 'y' coordinate is the top of the node, and 'h' is its full height
+            drawCenteredText(contentStream, positionName, x, y, w, h, fontRegular, Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
         }
     }
     
