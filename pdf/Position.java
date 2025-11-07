@@ -11,13 +11,13 @@ public class Position {
     private String positionName;
     private String hierarchyCode;
     private String parentHierarchyCode;
-    private Integer norm;
+    private Integer norm; // Default will be null, which is what we want
     private String titleCode;
     private List<Position> positions;
 
     public Position() {
         this.positions = new ArrayList<>();
-        this.norm = 0;
+        // this.norm = 0; // Let's remove this, so we can distinguish between 0 and not-provided
     }
 
     public Integer getPositionID() {
@@ -53,7 +53,7 @@ public class Position {
     }
 
     public Integer getNorm() {
-        return norm != null ? norm : 0;
+        return norm; // Return the raw Integer, which can be null
     }
 
     public void setNorm(Integer norm) {

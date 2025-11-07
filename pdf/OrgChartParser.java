@@ -1,5 +1,6 @@
 package myfirstmodule.pdf;
 
+import com.mendix.core.Core;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
@@ -70,17 +71,20 @@ public class OrgChartParser {
         if (json.containsKey("Norm")) {
             Object norm = json.get("Norm");
             // Explicitly parse to integer - handle Number, String, or null
-            int normValue = 0;
+            Integer normValue = null;
             if (norm instanceof Number) {
                 normValue = ((Number) norm).intValue();
             } else if (norm instanceof String) {
                 try {
                     normValue = Integer.parseInt((String) norm);
                 } catch (NumberFormatException e) {
-                    normValue = 0;
+                    normValue = null; // or 0, depending on desired behavior for malformed strings
                 }
             }
             pos.setNorm(normValue);
+            Core.getLogger("OrgChartParser").info("Parsing Norm for position '" + pos.getPositionName() + "'. Raw value: '" + norm + "', Parsed value: " + normValue);
+        } else {
+             Core.getLogger("OrgChartParser").info("No 'Norm' key found for position '" + pos.getPositionName() + "'.");
         }
         
         if (json.containsKey("TitleCode")) {
