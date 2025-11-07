@@ -1,5 +1,6 @@
 package myfirstmodule.pdf;
 
+import com.mendix.core.Core;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -492,6 +493,7 @@ public class OrgChartRenderer {
         // Explicitly parse and convert to int for proper integer comparison
         Integer normValue = position.getNorm();
         int norm = (normValue != null) ? normValue.intValue() : 0;
+        Core.getLogger("OrgChartRenderer").info("Rendering node '" + positionName + "'. Norm value from position: " + normValue + ", Converted to int: " + norm + ", Will display: " + (norm > 0));
         if (norm > 0) {
             // Reserve bottom area for norm (padding + margin + font height)
             float reservedBottom = Style.NODE_PADDING + Style.NODE_NORM_MARGIN_TOP + Style.NODE_NORM_FONT_SIZE + Style.NODE_PADDING;

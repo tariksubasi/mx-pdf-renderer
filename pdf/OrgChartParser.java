@@ -73,12 +73,18 @@ public class OrgChartParser {
             // Explicitly parse to integer - handle Number, String, or null
             Integer normValue = null;
             if (norm instanceof Number) {
-                normValue = ((Number) norm).intValue();
+                int parsed = ((Number) norm).intValue();
+                normValue = (parsed > 0) ? parsed : null; // Only store if > 0
             } else if (norm instanceof String) {
                 try {
-                    normValue = Integer.parseInt((String) norm);
+                    String trimmed = ((String) norm).trim();
+                    if (!trimmed.isEmpty()) {
+                        int parsed = Integer.parseInt(trimmed);
+                        normValue = (parsed > 0) ? parsed : null; // Only store if > 0
+                    }
                 } catch (NumberFormatException e) {
-                    normValue = null; // or 0, depending on desired behavior for malformed strings
+                    normValue = null; // Invalid string, set to null
+                    Core.getLogger("OrgChartParser").warn("Failed to parse Norm value '" + norm + "' for position '" + pos.getPositionName() + "': " + e.getMessage());
                 }
             }
             pos.setNorm(normValue);
