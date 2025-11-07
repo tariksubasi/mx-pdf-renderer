@@ -70,7 +70,7 @@ public class PDFRenderer extends CustomJavaAction<java.lang.String>
 				// Flat array structure - each position has direct children in Positions array (not recursive nested)
 				// HierarchyCode is used to build the tree structure
 				jsonTR = "["
-			+ "{\"PositionID\": 1, \"PositionName\": \"Icra Kurulu Baskani ve Genel Mudur\", \"Norm\": \"1\", \"TitleCode\": \"9\", \"HierarchyCode\": \"/1/\", \"ParentHierarchyCode\": \"\", \"Positions\": ["
+			+ "{\"PositionID\": 1, \"PositionName\": \"Icra Kurulu Başkanı ve Genel Mudur\", \"Norm\": \"1\", \"TitleCode\": \"9\", \"HierarchyCode\": \"/1/\", \"ParentHierarchyCode\": \"\", \"Positions\": ["
 			+ "  {\"PositionID\": 2, \"PositionName\": \"Bilgi Teknolojileri ve Dijital Donusum Direktoru\", \"Norm\": \"1\", \"TitleCode\": \"12\", \"HierarchyCode\": \"/1/2/\", \"ParentHierarchyCode\": \"/1/\", \"Positions\": []},"
 			+ "  {\"PositionID\": 3, \"PositionName\": \"Mali Isler ve Finans Yonetimi Direktoru\", \"Norm\": \"1\", \"TitleCode\": \"12\", \"HierarchyCode\": \"/1/3/\", \"ParentHierarchyCode\": \"/1/\", \"Positions\": []},"
 			+ "  {\"PositionID\": 4, \"PositionName\": \"Operasyon ve Surecler Yonetimi Direktoru\", \"Norm\": \"1\", \"TitleCode\": \"12\", \"HierarchyCode\": \"/1/4/\", \"ParentHierarchyCode\": \"/1/\", \"Positions\": []},"

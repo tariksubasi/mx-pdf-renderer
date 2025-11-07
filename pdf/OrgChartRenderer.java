@@ -6,15 +6,13 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.cos.COSDictionary;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -65,33 +63,110 @@ public class OrgChartRenderer {
     
     public OrgChartRenderer() throws Exception {
         this.document = new PDDocument();
-        // PDFBox 3.x - use Helvetica (closest to Roboto/Benton in PDF standard fonts)
-        this.fontRegular = createFont("Helvetica");
-        this.fontBold = createFont("Helvetica-Bold");
-    }
-    
-    /**
-     * Create a Type1 font using COSDictionary (PDFBox 3.x way)
-     */
-    private PDFont createFont(String baseFontName) throws Exception {
-        COSDictionary fontDict = new COSDictionary();
-        fontDict.setItem(COSName.TYPE, COSName.FONT);
-        fontDict.setItem(COSName.SUBTYPE, COSName.TYPE1);
-        fontDict.setItem(COSName.BASE_FONT, COSName.getPDFName(baseFontName));
-        return new PDType1Font(fontDict);
+        
+        // Try multiple resource paths to find the fonts (classpath)
+        String[] regularPaths = {
+            "/myfirstmodule/font/Roboto-Regular.ttf",
+            "/font/Roboto-Regular.ttf",
+            "font/Roboto-Regular.ttf",
+            "/resources/font/Roboto-Regular.ttf"
+        };
+        
+        String[] boldPaths = {
+            "/myfirstmodule/font/Roboto-Bold.ttf",
+            "/font/Roboto-Bold.ttf",
+            "font/Roboto-Bold.ttf",
+            "/resources/font/Roboto-Bold.ttf"
+        };
+        
+        InputStream regularFontStream = null;
+        InputStream boldFontStream = null;
+        
+        // Try to load regular font from multiple classpath locations
+        for (String path : regularPaths) {
+            regularFontStream = getClass().getResourceAsStream(path);
+            if (regularFontStream != null) {
+                Core.getLogger("OrgChartRenderer").info("Found Roboto-Regular.ttf at: " + path);
+                break;
+            }
+        }
+        
+        // Try to load bold font from multiple classpath locations
+        for (String path : boldPaths) {
+            boldFontStream = getClass().getResourceAsStream(path);
+            if (boldFontStream != null) {
+                Core.getLogger("OrgChartRenderer").info("Found Roboto-Bold.ttf at: " + path);
+                break;
+            }
+        }
+        
+        // Fallback: try file system under Mendix resources path (deployment/resources)
+        try {
+            if (regularFontStream == null) {
+                String base = com.mendix.core.Core.getConfiguration().getResourcesPath().getAbsolutePath();
+                String[] fileCandidates = new String[] {
+                    base + java.io.File.separator + "font" + java.io.File.separator + "Roboto-Regular.ttf",
+                    base + java.io.File.separator + "fonts" + java.io.File.separator + "Roboto-Regular.ttf",
+                    "resources" + java.io.File.separator + "font" + java.io.File.separator + "Roboto-Regular.ttf"
+                };
+                for (String p : fileCandidates) {
+                    try {
+                        regularFontStream = new java.io.FileInputStream(p);
+                        Core.getLogger("OrgChartRenderer").info("Found Roboto-Regular.ttf at file path: " + p);
+                        break;
+                    } catch (java.io.FileNotFoundException ignore) { }
+                }
+            }
+            if (boldFontStream == null) {
+                String base = com.mendix.core.Core.getConfiguration().getResourcesPath().getAbsolutePath();
+                String[] fileCandidates = new String[] {
+                    base + java.io.File.separator + "font" + java.io.File.separator + "Roboto-Bold.ttf",
+                    base + java.io.File.separator + "fonts" + java.io.File.separator + "Roboto-Bold.ttf",
+                    "resources" + java.io.File.separator + "font" + java.io.File.separator + "Roboto-Bold.ttf"
+                };
+                for (String p : fileCandidates) {
+                    try {
+                        boldFontStream = new java.io.FileInputStream(p);
+                        Core.getLogger("OrgChartRenderer").info("Found Roboto-Bold.ttf at file path: " + p);
+                        break;
+                    } catch (java.io.FileNotFoundException ignore) { }
+                }
+            }
+        } catch (Exception e) {
+            Core.getLogger("OrgChartRenderer").warn("Exception while probing file system for fonts: " + e.getMessage());
+        }
+        
+        if (regularFontStream == null) {
+            throw new IOException("Could not find 'Roboto-Regular.ttf'. Tried classpath paths: " + String.join(", ", regularPaths) + " and common file paths under resources/font.");
+        }
+        if (boldFontStream == null) {
+            throw new IOException("Could not find 'Roboto-Bold.ttf'. Tried classpath paths: " + String.join(", ", boldPaths) + " and common file paths under resources/font.");
+        }
+        
+        try {
+            this.fontRegular = PDType0Font.load(document, regularFontStream);
+            this.fontBold = PDType0Font.load(document, boldFontStream);
+            Core.getLogger("OrgChartRenderer").info("Successfully loaded Roboto fonts with Turkish character support!");
+        } catch (IOException e) {
+            Core.getLogger("OrgChartRenderer").error("Failed to load TTF fonts: " + e.getMessage());
+            throw e;
+        } finally {
+            try { if (regularFontStream != null) regularFontStream.close(); } catch (IOException ignore) {}
+            try { if (boldFontStream != null) boldFontStream.close(); } catch (IOException ignore) {}
+        }
     }
     
     /**
      * Get regular font
      */
-    private PDFont getRegularFont(PDPage page) {
+    private PDFont getRegularFont() {
         return fontRegular;
     }
     
     /**
      * Get bold font
      */
-    private PDFont getBoldFont(PDPage page) {
+    private PDFont getBoldFont() {
         return fontBold;
     }
     
@@ -198,34 +273,14 @@ public class OrgChartRenderer {
             title = "Organization Chart";
         }
         
-        // Sanitize text for Courier font (remove Turkish characters)
-        title = sanitizeText(title);
-        
         contentStream.setNonStrokingColor(Color.BLACK);
         contentStream.beginText();
-        contentStream.setFont(getBoldFont(page), Style.HEADER_FONT_SIZE);
+        contentStream.setFont(getBoldFont(), Style.HEADER_FONT_SIZE);
         contentStream.newLineAtOffset(Style.PAGE_PADDING, y - Style.HEADER_FONT_SIZE);
         contentStream.showText(title);
         contentStream.endText();
         
         return y - Style.HEADER_FONT_SIZE - Style.HEADER_MARGIN_BOTTOM;
-    }
-    
-    /**
-     * Sanitize text to remove Turkish/special characters that Courier doesn't support
-     */
-    private String sanitizeText(String text) {
-        if (text == null) return "";
-        return text
-            // Replace newline characters with a space to prevent font errors
-            .replaceAll("[\\r\\n]+", " ")
-            .replace("ş", "s").replace("Ş", "S")
-            .replace("ğ", "g").replace("Ğ", "G")
-            .replace("ü", "u").replace("Ü", "U")
-            .replace("ö", "o").replace("Ö", "O")
-            .replace("ç", "c").replace("Ç", "C")
-            .replace("ı", "i").replace("İ", "I")
-            .replaceAll("[^\\x00-\\x7F]", "?"); // Replace any other non-ASCII with ?
     }
     
     /**
@@ -331,13 +386,11 @@ public class OrgChartRenderer {
      * Draw total norm text (label already contains the number)
      */
     private float drawTotalNorm(PDPageContentStream contentStream, String label, float y, PDPage page) throws Exception {
-        String text = sanitizeText(label);
-        
         contentStream.setNonStrokingColor(Color.BLACK);
         contentStream.beginText();
-        contentStream.setFont(getRegularFont(page), Style.TOTAL_NORM_FONT_SIZE);
+        contentStream.setFont(getRegularFont(), Style.TOTAL_NORM_FONT_SIZE);
         contentStream.newLineAtOffset(Style.PAGE_PADDING, y - Style.TOTAL_NORM_FONT_SIZE);
-        contentStream.showText(text);
+        contentStream.showText(label);
         contentStream.endText();
         
         return y - Style.TOTAL_NORM_FONT_SIZE;
@@ -485,7 +538,6 @@ public class OrgChartRenderer {
         
         // Draw position name (centered, possibly multi-line)  
         String positionName = position.getPositionName() != null ? position.getPositionName() : "";
-        positionName = sanitizeText(positionName);
         
         // If norm is 0, center the text vertically, otherwise leave room for norm at bottom
         // Explicitly parse and convert to int for proper integer comparison
@@ -497,16 +549,16 @@ public class OrgChartRenderer {
             float reservedBottom = Style.NODE_PADDING + Style.NODE_NORM_MARGIN_TOP + Style.NODE_NORM_FONT_SIZE + Style.NODE_PADDING;
             float textAreaHeight = Math.max(h - reservedBottom, Style.NODE_TEXT_FONT_SIZE * 1.3f);
             // Center name inside the top text area (from y down to y - textAreaHeight)
-            drawCenteredText(contentStream, positionName, x, y, w, textAreaHeight, fontRegular, Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
+            drawCenteredText(contentStream, positionName, x, y, w, textAreaHeight, getRegularFont(), Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
 
             // Draw norm (centered, at bottom) with margin above
             String normText = String.valueOf(norm);
             float normY = y - h + Style.NODE_PADDING + Style.NODE_NORM_MARGIN_TOP + Style.NODE_NORM_FONT_SIZE;
-            drawCenteredText(contentStream, normText, x, normY, w, 0, fontRegular, Style.NODE_NORM_FONT_SIZE, Color.BLACK, false);
+            drawCenteredText(contentStream, normText, x, normY, w, 0, getRegularFont(), Style.NODE_NORM_FONT_SIZE, Color.BLACK, false);
         } else {
             // No norm - center position name vertically in the whole box
             // The 'y' coordinate is the top of the node, and 'h' is its full height
-            drawCenteredText(contentStream, positionName, x, y, w, h, fontRegular, Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
+            drawCenteredText(contentStream, positionName, x, y, w, h, getRegularFont(), Style.NODE_TEXT_FONT_SIZE, Color.BLACK, true);
         }
     }
     
@@ -664,7 +716,7 @@ public class OrgChartRenderer {
                 contentStream.beginText();
                 contentStream.setFont(fontRegular, Style.FOOTER_TEXT_FONT_SIZE);
                 contentStream.newLineAtOffset(Style.PAGE_PADDING, textY);
-                contentStream.showText(sanitizeText(line));
+                contentStream.showText(line);
                 contentStream.endText();
                 textY += Style.FOOTER_TEXT_FONT_SIZE * 1.4f;
             }
