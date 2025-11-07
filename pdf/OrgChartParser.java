@@ -149,6 +149,12 @@ public class OrgChartParser {
             if (positionMap.containsKey(pos.getPositionID())) {
                 Position existing = positionMap.get(pos.getPositionID());
                 existing.setPositions(mergePositions(existing.getPositions(), cloned.getPositions()));
+                // Preserve a positive Norm if existing doesn't have it
+                Integer existingNorm = existing.getNorm();
+                Integer newNorm = cloned.getNorm();
+                if ((existingNorm == null || existingNorm.intValue() <= 0) && newNorm != null && newNorm.intValue() > 0) {
+                    existing.setNorm(newNorm);
+                }
             } else {
                 positionMap.put(pos.getPositionID(), cloned);
             }
